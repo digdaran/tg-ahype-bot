@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+venvs/
+data/*.sqlite3
+data/*.db
+node_modules/
+admin-frontend/dist/
+.env
+*.log

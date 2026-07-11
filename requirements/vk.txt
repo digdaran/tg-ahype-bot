@@ -1,0 +1,3 @@
+-r base.txt
+# vkbottle 4.x требует aiohttp>=3.11 — намеренно в отдельном окружении/контейнере от aiogram.
+vkbottle==4.4.4

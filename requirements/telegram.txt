@@ -1,0 +1,5 @@
+-r base.txt
+# aiogram 3.13.x закрепляет aiohttp<3.11 — не устанавливать в одно окружение с vkbottle.
+aiogram==3.13.1
+# Нужен для поддержки прокси (HTTP/SOCKS5) в AiohttpSession — см. TELEGRAM_PROXY_URL в .env.
+aiohttp-socks==0.11.0

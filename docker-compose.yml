@@ -1,0 +1,81 @@
+# ============================================================================
+# Docker Compose — платформа розыгрышей цифровых постеров.
+#
+# По умолчанию используется SQLite (общий volume sqlite_data), что подходит
+# для старта / небольших объёмов. Переход на PostgreSQL выполняется БЕЗ
+# изменения кода — достаточно:
+#   1. Раскомментировать сервис `postgres` ниже.
+#   2. Поменять DATABASE_URL в .env на
+#      postgresql+asyncpg://raffle:raffle@postgres:5432/raffle
+#   3. Добавить `depends_on: [postgres]` в backend/telegram-bot/vk-bot.
+# ============================================================================
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - sqlite_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  telegram-bot:
+    build:
+      context: .
+      dockerfile: docker/telegram.Dockerfile
+    env_file: .env
+    volumes:
+      - sqlite_data:/app/data
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  vk-bot:
+    build:
+      context: .
+      dockerfile: docker/vk.Dockerfile
+    env_file: .env
+    volumes:
+      - sqlite_data:/app/data
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  admin-frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        VITE_API_BASE_URL: ${APP_BASE_URL:-http://localhost:8000}
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  # --- PostgreSQL (для перехода с SQLite — см. заголовок файла) ---
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: raffle
+  #     POSTGRES_PASSWORD: raffle
+  #     POSTGRES_DB: raffle
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+  #   restart: unless-stopped
+
+volumes:
+  sqlite_data:
+  # postgres_data:

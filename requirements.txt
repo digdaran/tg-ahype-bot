@@ -1,0 +1,9 @@
+# Зависимости разнесены по сервисам, т.к. aiogram и vkbottle требуют
+# несовместимые между собой версии aiohttp и не должны стоять в одном venv.
+#
+#   pip install -r requirements/backend.txt   # FastAPI admin API + webhooks
+#   pip install -r requirements/telegram.txt  # Telegram-бот
+#   pip install -r requirements/vk.txt        # VK-бот
+#
+# Общие зависимости лежат в requirements/base.txt и подключаются каждым
+# из трёх файлов через "-r base.txt".
