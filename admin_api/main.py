@@ -9,6 +9,7 @@ from __future__ import annotations
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.config import get_settings
 from app.core.exceptions import (
@@ -23,6 +24,7 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.core.logging import configure_logging, get_logger
+from app.core.middleware import RequestIDMiddleware, SecurityHeadersMiddleware
 
 from admin_api.routers import (
     audit_log,
@@ -51,13 +53,27 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# --- CORS ---
+# allow_credentials=False: SPA авторизуется JWT в заголовке Authorization
+# (localStorage), а не cookie, поэтому credentials (cookies) через CORS не
+# нужны — держим её выключенной, чтобы не расширять поверхность атаки.
+# allow_methods/allow_headers сужены до реально используемых.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+    expose_headers=["X-Request-ID"],
 )
+
+# --- Заголовки безопасности + request-id (см. app/core/middleware.py) ---
+# Порядок добавления в Starlette формирует стек "снаружи внутрь" в обратном
+# порядке: последний добавленный middleware выполняется первым — поэтому
+# RequestIDMiddleware добавлен последним, чтобы request_id был доступен для
+# логирования уже на входе, до CORS/маршрутизации.
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestIDMiddleware)
 
 _DOMAIN_ERROR_STATUS = {
     ValidationError: status.HTTP_400_BAD_REQUEST,
@@ -102,3 +118,10 @@ app.include_router(reports.router)
 app.include_router(audit_log.router)
 app.include_router(webhooks_tbank.router)
 app.include_router(webhooks_vtb.router)
+
+# --- Метрики Prometheus ---
+# /metrics НЕ проксируется наружу через Caddy (см. docker/Caddyfile) —
+# доступен только внутри docker-сети, поэтому отдельной авторизацией для
+# него не защищаемся (при необходимости — добавить basic-auth на уровне
+# reverse-proxy, если /metrics потребуется наружу для внешнего Prometheus).
+Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)

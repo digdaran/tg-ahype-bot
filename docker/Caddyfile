@@ -1,0 +1,41 @@
+# Caddyfile — reverse-proxy с автоматическим HTTPS.
+#
+# DOMAIN и LETSENCRYPT_EMAIL берутся из .env (docker-compose пробрасывает их
+# как переменные окружения в контейнер caddy).
+#
+# Поведение:
+#   - DOMAIN указывает на реальный домен, DNS которого смотрит на этот
+#     сервер, порты 80/443 открыты наружу -> Caddy сам получает и продлевает
+#     сертификат Let's Encrypt (ACME HTTP-01), без какой-либо ручной настройки.
+#   - DOMAIN=localhost (значение по умолчанию, для локальной разработки)
+#     -> Caddy выпускает локально доверенный self-signed сертификат через
+#     свой внутренний CA (сертификат нужно один раз добавить в доверенные,
+#     либо просто игнорировать предупреждение браузера при локальном тесте).
+#
+# Маршрутизация:
+#   /api/*  -> backend (FastAPI: REST API + вебхуки платёжных систем)
+#   всё остальное -> admin-frontend (собранный React SPA, отдаётся nginx'ом)
+#
+# /metrics НАМЕРЕННО не проксируется наружу — доступен только внутри
+# docker-сети (см. комментарий в admin_api/main.py).
+{
+	email {$LETSENCRYPT_EMAIL:admin@example.com}
+}
+
+{$DOMAIN:localhost} {
+	encode gzip
+
+	@api path /api/*
+	handle @api {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		reverse_proxy admin-frontend:8080
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

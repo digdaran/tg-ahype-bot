@@ -10,3 +10,4 @@ admin-frontend/dist/
 *.log
 logs/
 .auto_update.lock
+backups/

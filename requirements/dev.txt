@@ -1,0 +1,7 @@
+-r backend.txt
+# Тесты (pytest, см. tests/) — тестируется backend-слой (app/*, admin_api/*),
+# поэтому база — requirements/backend.txt, а не telegram/vk (несовместимые
+# версии aiohttp с ним не пересекаются).
+pytest==8.3.3
+pytest-asyncio==0.24.0
+pytest-cov==5.0.0

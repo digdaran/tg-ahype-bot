@@ -5,9 +5,10 @@ Webhook ВТБ. Обрабатывается отдельным роутером
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import PlainTextResponse
 
+from app.core.rate_limit import webhook_rate_limiter
 from app.database import AsyncSessionLocal
 from app.payments.vtb import VTBProvider
 from app.services.payment_service import PaymentService
@@ -15,7 +16,7 @@ from app.services.payment_service import PaymentService
 router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 
 
-@router.post("/vtb")
+@router.post("/vtb", dependencies=[Depends(webhook_rate_limiter)])
 async def vtb_webhook(request: Request) -> PlainTextResponse:
     payload = await request.json()
     provider = VTBProvider()

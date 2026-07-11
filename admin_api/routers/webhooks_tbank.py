@@ -6,10 +6,10 @@ Webhook Т-Банка. Отдельный роутер на банк — это 
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import PlainTextResponse
 
-from admin_api.deps import get_db
+from app.core.rate_limit import webhook_rate_limiter
 from app.database import AsyncSessionLocal
 from app.payments.tbank import TBankProvider
 from app.services.payment_service import PaymentService
@@ -17,7 +17,7 @@ from app.services.payment_service import PaymentService
 router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 
 
-@router.post("/tbank")
+@router.post("/tbank", dependencies=[Depends(webhook_rate_limiter)])
 async def tbank_webhook(request: Request) -> PlainTextResponse:
     payload = await request.json()
     provider = TBankProvider()

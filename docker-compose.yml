@@ -8,6 +8,16 @@
 #   2. Поменять DATABASE_URL в .env на
 #      postgresql+asyncpg://raffle:raffle@postgres:5432/raffle
 #   3. Добавить `depends_on: [postgres]` в backend/telegram-bot/vk-bot.
+#
+# Reverse-proxy/TLS: публично наружу (порты 80/443) смотрит только сервис
+# `caddy` — он терминирует HTTPS (см. docker/Caddyfile) и проксирует запросы
+# на backend/admin-frontend. Порты 8000/8080 у backend/admin-frontend
+# оставлены проброшенными на хост для локальной разработки и отладки в обход
+# прокси; в проде их можно убрать (закомментировать `ports:` соответствующего
+# сервиса), чтобы весь внешний трафик шёл строго через Caddy.
+#
+# Ограничения ресурсов (mem_limit/cpus) — стартовые ориентиры для небольшой
+# инсталляции, при необходимости скорректируйте под реальную нагрузку.
 # ============================================================================
 
 services:
@@ -21,6 +31,8 @@ services:
     volumes:
       - sqlite_data:/app/data
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: "1.0"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 15s
@@ -35,9 +47,18 @@ services:
     volumes:
       - sqlite_data:/app/data
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: "0.5"
     depends_on:
       backend:
         condition: service_healthy
+    healthcheck:
+      # У бота нет HTTP-эндпоинта — проверяем, что процесс long-polling жив.
+      test: ["CMD-SHELL", "pgrep -f 'bots.telegram.bot' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   vk-bot:
     build:
@@ -47,9 +68,17 @@ services:
     volumes:
       - sqlite_data:/app/data
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: "0.5"
     depends_on:
       backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'bots.vk.bot' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   admin-frontend:
     build:
@@ -58,10 +87,39 @@ services:
       args:
         VITE_API_BASE_URL: ${APP_BASE_URL:-http://localhost:8000}
     ports:
-      - "8080:80"
+      - "8080:8080"
     restart: unless-stopped
+    mem_limit: 128m
+    cpus: "0.5"
     depends_on:
       - backend
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - admin-frontend
+    mem_limit: 128m
+    cpus: "0.5"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:2019/config/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   # --- PostgreSQL (для перехода с SQLite — см. заголовок файла) ---
   # postgres:
@@ -75,7 +133,15 @@ services:
   #   ports:
   #     - "5432:5432"
   #   restart: unless-stopped
+  #   mem_limit: 512m
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U raffle"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
 
 volumes:
   sqlite_data:
+  caddy_data:
+  caddy_config:
   # postgres_data:

@@ -20,6 +20,13 @@ RUN mkdir -p /app/data
 COPY docker/backend-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+# Непривилегированный пользователь: процесс приложения не должен работать от
+# root внутри контейнера. /app/data должен принадлежать ему — туда пишется
+# SQLite (в volume) и куда его смонтирует docker compose.
+RUN groupadd -r app && useradd -r -g app -d /app -s /usr/sbin/nologin app \
+    && chown -R app:app /app
+USER app
+
 EXPOSE 8000
 
 ENTRYPOINT ["/entrypoint.sh"]

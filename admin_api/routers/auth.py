@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin_api.deps import get_client_ip, get_current_user, get_db
 from app.core.exceptions import AuthError, UserBlockedError
+from app.core.rate_limit import login_rate_limiter
 from app.models.panel_user import PanelUser
 from app.schemas.auth import LoginRequest, PanelUserOut, TokenResponse
 from app.services.auth_service import AuthService
@@ -13,8 +14,9 @@ from app.services.auth_service import AuthService
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, dependencies=[Depends(login_rate_limiter)])
 async def login(payload: LoginRequest, request: Request, session: AsyncSession = Depends(get_db)) -> TokenResponse:
+    """Не более 10 попыток/минуту с одного IP — защита от перебора пароля (см. app/core/rate_limit.py)."""
     service = AuthService(session)
     try:
         access_token, refresh_token, _ = await service.authenticate(

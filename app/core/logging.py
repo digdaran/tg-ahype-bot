@@ -13,6 +13,10 @@ def configure_logging(app_env: str = "production") -> None:
     )
     structlog.configure(
         processors=[
+            # Подмешивает contextvars (в частности request_id, см.
+            # app/core/middleware.py:RequestIDMiddleware) в каждую запись лога
+            # без необходимости явно прокидывать его через все сервисы.
+            structlog.contextvars.merge_contextvars,
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.add_log_level,
             structlog.processors.StackInfoRenderer(),
