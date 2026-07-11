@@ -8,3 +8,5 @@ node_modules/
 admin-frontend/dist/
 .env
 *.log
+logs/
+.auto_update.lock
