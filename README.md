@@ -98,6 +98,16 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
+Каждое следующее обновление — просто:
+
+```bash
+./deploy.sh
+```
+
+(git pull + пересборка и перезапуск Docker-сервисов; см. комментарии в
+самом `deploy.sh`. Для автоматического запуска по расписанию вместо ручного
+`./deploy.sh` — см. `scripts/auto_update.sh` и `docs/AUTO_UPDATE.md`.)
+
 После запуска:
 - Веб-панель: http://localhost:8080
 - API + Swagger-документация: http://localhost:8000/docs
