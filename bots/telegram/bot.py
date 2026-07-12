@@ -12,6 +12,12 @@ Telegram Bot API (см. app/services/notification_service.py) — поэтому
 задайте TELEGRAM_PROXY_URL в .env — бот пойдёт через HTTP(S) или SOCKS5
 прокси (см. AiohttpSession ниже). Без этой переменной прокси не используется.
 
+Выключатель: TELEGRAM_ENABLED=false в .env — процесс запускается (контейнер
+остаётся "healthy"), но к Telegram не подключается и ничего не делает. Чтобы
+контейнер вообще не запускался — уберите профиль "telegram" из
+COMPOSE_PROFILES (см. .env.example и docker-compose.yml). Флаг — вторая
+линия защиты на случай, если контейнер всё же поднят.
+
 Запуск: python -m bots.telegram.bot
 """
 from __future__ import annotations
@@ -60,6 +66,13 @@ def _mask_proxy(proxy_url: str) -> str:
 
 
 async def main() -> None:
+    if not settings.telegram_enabled:
+        logger.info("telegram_bot_disabled")
+        # Намеренно не выходим (иначе Docker с restart:unless-stopped будет
+        # бесконечно перезапускать контейнер) — просто ничего не делаем.
+        await asyncio.Event().wait()
+        return
+
     if not settings.telegram_bot_token:
         logger.error("telegram_bot_token_missing")
         raise SystemExit("TELEGRAM_BOT_TOKEN не задан в .env")

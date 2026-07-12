@@ -26,12 +26,22 @@ class Settings(BaseSettings):
     jwt_refresh_ttl_days: int = 14
 
     # Telegram
+    # Общий выключатель интеграции: если False — бот-процесс (bots/telegram/bot.py)
+    # запускается, но ничего не делает (не подключается к Telegram), а backend
+    # (уведомления после оплаты, рассылки) не пытается слать через Telegram,
+    # даже если у участника есть привязанный telegram_user_id. Основной способ
+    # реально не запускать контейнер бота — переменная COMPOSE_PROFILES (см.
+    # .env.example и docker-compose.yml); этот флаг — второй уровень защиты на
+    # случай, если контейнер всё же запущен.
+    telegram_enabled: bool = True
     telegram_bot_token: str = ""
     # Прокси для связи бота с api.telegram.org (если Telegram недоступен напрямую
     # с сервера). Формат: http://user:pass@host:port или socks5://user:pass@host:port
     telegram_proxy_url: Optional[str] = None
 
     # VK
+    # Аналогично telegram_enabled — общий выключатель VK-интеграции.
+    vk_enabled: bool = True
     vk_group_token: str = ""
     # Строка, а не число: vkbottle сам определяет группу по VK_GROUP_TOKEN,
     # это поле нигде не используется как число — принимаем как есть, в любом

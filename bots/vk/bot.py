@@ -6,6 +6,12 @@
 через VK API (app/services/notification_service.py), поэтому не зависят
 от того, запущен ли процесс этого бота.
 
+Выключатель: VK_ENABLED=false в .env — процесс запускается (контейнер
+остаётся "healthy"), но к VK не подключается и ничего не делает. Чтобы
+контейнер вообще не запускался — уберите профиль "vk" из COMPOSE_PROFILES
+(см. .env.example и docker-compose.yml). Флаг — вторая линия защиты на
+случай, если контейнер всё же поднят.
+
 Запуск: python -m bots.vk.bot
 """
 from __future__ import annotations
@@ -28,6 +34,15 @@ logger = get_logger(__name__)
 
 
 def main() -> None:
+    if not settings.vk_enabled:
+        logger.info("vk_bot_disabled")
+        # Намеренно не выходим (иначе Docker с restart:unless-stopped будет
+        # бесконечно перезапускать контейнер) — просто ничего не делаем.
+        import time
+
+        while True:
+            time.sleep(3600)
+
     if not settings.vk_group_token:
         logger.error("vk_group_token_missing")
         raise SystemExit("VK_GROUP_TOKEN не задан в .env")

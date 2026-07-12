@@ -9,6 +9,14 @@
 Поддерживаемые аудитории: все / только оплатившие / только неоплатившие /
 только офлайн / только онлайн / диапазон дат регистрации / диапазон
 количества номерков.
+
+Если канал выключен (TELEGRAM_ENABLED=false / VK_ENABLED=false, см.
+app/config.py): рассылку строго в выключенный канал (TELEGRAM или VK)
+создать нельзя (ValidationError при создании) — это явная ошибка
+администратора, лучше сказать сразу, чем молча отправить 0 сообщений.
+Рассылку в BOTH создать можно всегда — при отправке она уйдёт только по
+включённым каналам, выключенный канал просто пропускается (частичная
+отправка — не ошибка, т.к. администратор явно выбрал оба канала).
 """
 from __future__ import annotations
 
@@ -21,6 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.exceptions import ValidationError
 from app.integrations import telegram_api, vk_api
 from app.models.broadcast import Broadcast
 from app.models.enums import (
@@ -89,6 +98,19 @@ class BroadcastService:
 
         return participants
 
+    @staticmethod
+    def _require_channel_enabled(channel: BroadcastChannelEnum) -> None:
+        """
+        Рассылку строго в один выключенный канал создать нельзя — явная
+        ошибка администратора (иначе он не поймёт, почему разослано 0 писем).
+        Канал BOTH разрешён всегда, при отправке выключенная половина
+        просто пропускается (см. send()/_dispatch ниже).
+        """
+        if channel == BroadcastChannelEnum.TELEGRAM and not settings.telegram_enabled:
+            raise ValidationError("Telegram-интеграция выключена (TELEGRAM_ENABLED=false) — рассылка через Telegram недоступна")
+        if channel == BroadcastChannelEnum.VK and not settings.vk_enabled:
+            raise ValidationError("VK-интеграция выключена (VK_ENABLED=false) — рассылка через VK недоступна")
+
     async def create_draft(
         self,
         title: str,
@@ -98,6 +120,7 @@ class BroadcastService:
         created_by_id: str,
         created_by_label: str,
     ) -> Broadcast:
+        self._require_channel_enabled(channel)
         broadcast = Broadcast(
             title=title,
             message_text=message_text,
@@ -136,9 +159,17 @@ class BroadcastService:
             nonlocal sent, failed
             async with semaphore:
                 ok = False
-                if broadcast.channel in (BroadcastChannelEnum.TELEGRAM, BroadcastChannelEnum.BOTH) and participant.telegram_user_id:
+                if (
+                    broadcast.channel in (BroadcastChannelEnum.TELEGRAM, BroadcastChannelEnum.BOTH)
+                    and settings.telegram_enabled
+                    and participant.telegram_user_id
+                ):
                     ok = await telegram_api.send_message(participant.telegram_user_id, broadcast.message_text) or ok
-                if broadcast.channel in (BroadcastChannelEnum.VK, BroadcastChannelEnum.BOTH) and participant.vk_user_id:
+                if (
+                    broadcast.channel in (BroadcastChannelEnum.VK, BroadcastChannelEnum.BOTH)
+                    and settings.vk_enabled
+                    and participant.vk_user_id
+                ):
                     ok = await vk_api.send_message(participant.vk_user_id, broadcast.message_text, random_id=idx) or ok
                 if ok:
                     sent += 1
@@ -147,9 +178,20 @@ class BroadcastService:
 
         await asyncio.gather(*(_dispatch(p, i) for i, p in enumerate(recipients)))
 
+        # Для BOTH явно фиксируем, какие каналы реально были активны на момент
+        # отправки — полезно при разборе, почему часть получателей не дошла
+        # (например VK был выключен, а часть аудитории привязана только к VK).
+        channels_used = [
+            name
+            for name, enabled in (("telegram", settings.telegram_enabled), ("vk", settings.vk_enabled))
+            if enabled and broadcast.channel in (BroadcastChannelEnum(name), BroadcastChannelEnum.BOTH)
+        ]
+
         broadcast.status = BroadcastStatusEnum.SENT
         broadcast.sent_at = datetime.now(timezone.utc)
-        broadcast.stats = json.dumps({"total": len(recipients), "sent": sent, "failed": failed})
+        broadcast.stats = json.dumps(
+            {"total": len(recipients), "sent": sent, "failed": failed, "channels_used": channels_used}
+        )
         await self.session.flush()
 
         await self.audit.log(
@@ -159,7 +201,7 @@ class BroadcastService:
             actor_label=actor_label,
             entity_type="broadcast",
             entity_id=broadcast.id,
-            details={"total": len(recipients), "sent": sent, "failed": failed},
+            details={"total": len(recipients), "sent": sent, "failed": failed, "channels_used": channels_used},
         )
         return broadcast
 

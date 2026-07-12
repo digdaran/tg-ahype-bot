@@ -18,6 +18,17 @@
 #
 # Ограничения ресурсов (mem_limit/cpus) — стартовые ориентиры для небольшой
 # инсталляции, при необходимости скорректируйте под реальную нагрузку.
+#
+# Включение/выключение ботов: telegram-bot и vk-bot запускаются только если
+# активирован их профиль (Docker Compose profiles). Активные профили
+# задаются переменной COMPOSE_PROFILES в .env (Compose читает её оттуда сам,
+# без дополнительных флагов). Например:
+#   COMPOSE_PROFILES=telegram        # только Telegram, VK-бот не запускается вовсе
+#   COMPOSE_PROFILES=telegram,vk     # оба бота
+# backend/admin-frontend/caddy профилей не имеют — запускаются всегда.
+# Это ортогонально флагам TELEGRAM_ENABLED/VK_ENABLED в .env (app/config.py):
+# профиль решает, запускается ли контейнер бота вообще, а флаг — что делает
+# backend (уведомления/рассылки), если бот всё же выключен через профиль.
 # ============================================================================
 
 services:
@@ -40,6 +51,7 @@ services:
       retries: 5
 
   telegram-bot:
+    profiles: ["telegram"]
     build:
       context: .
       dockerfile: docker/telegram.Dockerfile
@@ -61,6 +73,7 @@ services:
       start_period: 10s
 
   vk-bot:
+    profiles: ["vk"]
     build:
       context: .
       dockerfile: docker/vk.Dockerfile
