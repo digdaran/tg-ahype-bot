@@ -1,11 +1,13 @@
 """
-Тесты включения/выключения интеграций на уровне рассылок
-(app/services/broadcast_service.py):
-- рассылку строго в выключенный канал создать нельзя (ValidationError);
-- рассылку в BOTH создать можно всегда, но выключенный канал при отправке
-  реально пропускается (не дёргает HTTP API этого канала).
+Тесты BroadcastService (app/services/broadcast_service.py) в связке с
+выключателем Telegram-интеграции (TELEGRAM_ENABLED, см. app/config.py).
+
+Канал рассылки сейчас только Telegram — VK-интеграция полностью удалена из
+проекта (вернёмся к ней отдельно позже).
 """
 from __future__ import annotations
+
+import json
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,93 +29,76 @@ async def _make_participant(session: AsyncSession, **overrides) -> Participant:
 
 
 @pytest.fixture(autouse=True)
-def _reset_channel_flags(monkeypatch: pytest.MonkeyPatch):
-    # На случай, если предыдущий тест поменял флаги и забыл откатить —
-    # гарантируем чистое состояние (оба канала включены) на входе в тест.
+def _reset_channel_flag(monkeypatch: pytest.MonkeyPatch):
+    # Гарантируем чистое состояние (Telegram включён) на входе в каждый тест.
     monkeypatch.setattr(broadcast_service_module.settings, "telegram_enabled", True)
-    monkeypatch.setattr(broadcast_service_module.settings, "vk_enabled", True)
     yield
 
 
-async def test_create_draft_rejects_single_disabled_channel(session: AsyncSession, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(broadcast_service_module.settings, "vk_enabled", False)
+async def test_create_draft_rejects_when_telegram_disabled(session: AsyncSession, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(broadcast_service_module.settings, "telegram_enabled", False)
     service = BroadcastService(session)
 
     with pytest.raises(ValidationError):
         await service.create_draft(
             title="Тест", message_text="Привет", audience_filter={"audience": "all"},
-            channel=BroadcastChannelEnum.VK, created_by_id="admin-1", created_by_label="admin",
+            channel=BroadcastChannelEnum.TELEGRAM, created_by_id="admin-1", created_by_label="admin",
         )
 
 
-async def test_create_draft_allows_both_even_if_vk_disabled(session: AsyncSession, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(broadcast_service_module.settings, "vk_enabled", False)
-    service = BroadcastService(session)
+async def test_send_dispatches_to_telegram_participants(session: AsyncSession, monkeypatch: pytest.MonkeyPatch):
+    calls: list[tuple] = []
 
-    broadcast = await service.create_draft(
-        title="Тест", message_text="Привет", audience_filter={"audience": "all"},
-        channel=BroadcastChannelEnum.BOTH, created_by_id="admin-1", created_by_label="admin",
-    )
-    assert broadcast.channel == BroadcastChannelEnum.BOTH
-
-
-async def test_send_skips_disabled_channel(session: AsyncSession, monkeypatch: pytest.MonkeyPatch):
-    telegram_calls: list[tuple] = []
-    vk_calls: list[tuple] = []
-
-    async def fake_telegram_send(chat_id, text, reply_markup=None):
-        telegram_calls.append((chat_id, text))
+    async def fake_send_message(chat_id, text, reply_markup=None):
+        calls.append((chat_id, text))
         return True
 
-    async def fake_vk_send(user_id, text, random_id=None):
-        vk_calls.append((user_id, text))
-        return True
+    monkeypatch.setattr(broadcast_service_module.telegram_api, "send_message", fake_send_message)
 
-    monkeypatch.setattr(broadcast_service_module.telegram_api, "send_message", fake_telegram_send)
-    monkeypatch.setattr(broadcast_service_module.vk_api, "send_message", fake_vk_send)
-    monkeypatch.setattr(broadcast_service_module.settings, "vk_enabled", False)
-
-    await _make_participant(session, phone="+79990001133", telegram_user_id=111, vk_user_id=222)
+    await _make_participant(session, phone="+79990001133", telegram_user_id=111)
+    await _make_participant(session, phone="+79990001144", telegram_user_id=222)
+    await _make_participant(session, phone="+79990001155")  # без telegram_user_id - не должен получить сообщение
 
     service = BroadcastService(session)
     broadcast = await service.create_draft(
-        title="Тест", message_text="Привет всем", audience_filter={"audience": "all"},
-        channel=BroadcastChannelEnum.BOTH, created_by_id="admin-1", created_by_label="admin",
+        title="Тест", message_text="Всем привет", audience_filter={"audience": "all"},
+        channel=BroadcastChannelEnum.TELEGRAM, created_by_id="admin-1", created_by_label="admin",
     )
     sent_broadcast = await service.send(broadcast.id, actor_id="admin-1", actor_label="admin")
 
-    assert len(telegram_calls) == 1, "Telegram включён — сообщение должно уйти"
-    assert len(vk_calls) == 0, "VK выключен — send_message для VK вызываться не должен"
-
-    import json
+    assert len(calls) == 2
+    assert {c[0] for c in calls} == {111, 222}
 
     stats = json.loads(sent_broadcast.stats)
-    assert stats["channels_used"] == ["telegram"]
+    assert stats == {"total": 3, "sent": 2, "failed": 1}
 
 
-async def test_send_uses_both_channels_when_both_enabled(session: AsyncSession, monkeypatch: pytest.MonkeyPatch):
-    telegram_calls: list[tuple] = []
-    vk_calls: list[tuple] = []
+async def test_send_skips_if_telegram_disabled_after_creation(session: AsyncSession, monkeypatch: pytest.MonkeyPatch):
+    """
+    Рассылку создали, пока Telegram был включён, а перед отправкой его
+    выключили (TELEGRAM_ENABLED=false) — send() не должен дёргать API,
+    несмотря на то что у участников есть telegram_user_id.
+    """
+    calls: list = []
 
-    async def fake_telegram_send(chat_id, text, reply_markup=None):
-        telegram_calls.append((chat_id, text))
+    async def fake_send_message(chat_id, text, reply_markup=None):
+        calls.append(chat_id)
         return True
 
-    async def fake_vk_send(user_id, text, random_id=None):
-        vk_calls.append((user_id, text))
-        return True
+    monkeypatch.setattr(broadcast_service_module.telegram_api, "send_message", fake_send_message)
 
-    monkeypatch.setattr(broadcast_service_module.telegram_api, "send_message", fake_telegram_send)
-    monkeypatch.setattr(broadcast_service_module.vk_api, "send_message", fake_vk_send)
-
-    await _make_participant(session, phone="+79990001144", telegram_user_id=333, vk_user_id=444)
+    await _make_participant(session, phone="+79990001166", telegram_user_id=333)
 
     service = BroadcastService(session)
     broadcast = await service.create_draft(
-        title="Тест", message_text="Привет всем", audience_filter={"audience": "all"},
-        channel=BroadcastChannelEnum.BOTH, created_by_id="admin-1", created_by_label="admin",
+        title="Тест", message_text="Привет", audience_filter={"audience": "all"},
+        channel=BroadcastChannelEnum.TELEGRAM, created_by_id="admin-1", created_by_label="admin",
     )
-    await service.send(broadcast.id, actor_id="admin-1", actor_label="admin")
 
-    assert len(telegram_calls) == 1
-    assert len(vk_calls) == 1
+    monkeypatch.setattr(broadcast_service_module.settings, "telegram_enabled", False)
+    sent_broadcast = await service.send(broadcast.id, actor_id="admin-1", actor_label="admin")
+
+    assert calls == []
+    stats = json.loads(sent_broadcast.stats)
+    assert stats["sent"] == 0
+    assert stats["failed"] == 1

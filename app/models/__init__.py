@@ -1,8 +1,8 @@
 """
 Единая точка импорта всех ORM-моделей.
 
-Alembic (env.py) импортирует именно этот модуль, чтобы вся metadata
-Base была заполнена перед автогенерацией миграций.
+scripts/init_db.py импортирует именно этот модуль, чтобы вся metadata
+Base была заполнена перед create_all() (см. app/database.py).
 """
 from app.models.participant import Participant
 from app.models.giveaway import Giveaway

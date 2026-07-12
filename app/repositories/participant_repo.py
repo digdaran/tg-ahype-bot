@@ -22,10 +22,6 @@ class ParticipantRepository(BaseRepository[Participant]):
         )
         return result.scalar_one_or_none()
 
-    async def get_by_vk_id(self, vk_user_id: int) -> Optional[Participant]:
-        result = await self.session.execute(select(Participant).where(Participant.vk_user_id == vk_user_id))
-        return result.scalar_one_or_none()
-
     async def search(
         self,
         query: Optional[str] = None,
@@ -41,7 +37,6 @@ class ParticipantRepository(BaseRepository[Participant]):
                 Participant.phone.ilike(like),
                 Participant.full_name.ilike(like),
                 Participant.telegram_username.ilike(like),
-                Participant.vk_username.ilike(like),
             )
             stmt = stmt.where(condition)
             count_stmt = count_stmt.where(condition)

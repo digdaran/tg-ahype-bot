@@ -9,7 +9,7 @@ pip install -r requirements/backend.txt
 
 cp .env.example .env   # отредактировать при необходимости
 
-python -m alembic upgrade head
+python -m scripts.init_db
 python -m scripts.create_superadmin
 
 uvicorn admin_api.main:app --reload --port 8000
@@ -25,19 +25,9 @@ pip install -r requirements/telegram.txt
 python -m bots.telegram.bot
 ```
 
-## VK-бот
-
-```bash
-python3 -m venv .venv-vk
-source .venv-vk/bin/activate
-pip install -r requirements/vk.txt
-
-python -m bots.vk.bot
-```
-
-> Обратите внимание: `aiogram` и `vkbottle` требуют разные версии `aiohttp`,
-> поэтому backend/telegram-бот/vk-бот должны использовать РАЗНЫЕ виртуальные
-> окружения — так же, как в Docker-образах.
+> Backend и Telegram-бот используют разные `requirements/*.txt` (у FastAPI и
+> aiogram разные зависимости) — используйте РАЗНЫЕ виртуальные окружения,
+> так же, как в Docker-образах.
 
 ## Фронтенд
 
@@ -48,9 +38,11 @@ cp .env.example .env   # VITE_API_BASE_URL=http://localhost:8000
 npm run dev
 ```
 
-## Новая миграция после изменения моделей
+## Изменение схемы БД
 
-```bash
-python -m alembic revision --autogenerate -m "описание изменения"
-python -m alembic upgrade head
-```
+Проект не использует Alembic (только SQLite, см. README раздел «База
+данных»). После изменения моделей на чистой БД схема просто создастся
+заново через `python -m scripts.init_db`. Если БД уже существует и в ней
+есть данные — новую колонку/таблицу нужно добавить вручную (`ALTER TABLE`
+через `sqlite3`), т.к. `create_all()` не умеет менять уже существующие
+таблицы.

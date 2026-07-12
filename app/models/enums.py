@@ -32,9 +32,12 @@ class ManualRegistrationStatusEnum(str, enum.Enum):
 
 
 class BroadcastChannelEnum(str, enum.Enum):
+    """
+    VK-интеграция полностью удалена из проекта — остался только Telegram.
+    Enum сохранён (а не убран совсем), чтобы при необходимости вернуть VK
+    или добавить другой канал позже не пришлось трогать схему БД дважды.
+    """
     TELEGRAM = "telegram"
-    VK = "vk"
-    BOTH = "both"
 
 
 class BroadcastStatusEnum(str, enum.Enum):

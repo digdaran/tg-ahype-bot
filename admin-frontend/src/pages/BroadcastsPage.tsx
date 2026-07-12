@@ -8,7 +8,10 @@ export default function BroadcastsPage() {
 
   const [title, setTitle] = useState("");
   const [messageText, setMessageText] = useState("");
-  const [channel, setChannel] = useState("both");
+  // Канал сейчас только Telegram - VK-интеграция полностью удалена из
+  // проекта (вернёмся к ней отдельно позже), поэтому выбор канала в форме
+  // больше не нужен.
+  const channel = "telegram";
   const [audience, setAudience] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -66,14 +69,6 @@ export default function BroadcastsPage() {
           <div className="col-span-2">
             <label className="block text-sm font-medium mb-1">Текст сообщения</label>
             <textarea className="input" rows={3} value={messageText} onChange={(e) => setMessageText(e.target.value)} required />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Канал</label>
-            <select className="input" value={channel} onChange={(e) => setChannel(e.target.value)}>
-              <option value="both">Telegram + VK</option>
-              <option value="telegram">Только Telegram</option>
-              <option value="vk">Только VK</option>
-            </select>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Аудитория</label>

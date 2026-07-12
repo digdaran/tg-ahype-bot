@@ -1,9 +1,13 @@
 """
 Сервис регистрации участников.
 
-Главный идентификатор — номер телефона. Telegram ID и VK ID — вторичные,
-привязываются автоматически при первом запуске соответствующего бота,
-если участник с таким телефоном уже существует.
+Главный идентификатор — номер телефона. Telegram ID — вторичный,
+привязывается автоматически при первом запуске бота, если участник с таким
+телефоном уже существует.
+
+VK-интеграция полностью удалена из проекта (вернёмся к ней отдельно позже) —
+если понадобится восстановить привязку по VK, смотрите git-историю этого
+файла (методы link_vk/find_by_vk_id).
 """
 from __future__ import annotations
 
@@ -69,8 +73,8 @@ class RegistrationService:
     async def link_telegram(self, phone: str, telegram_user_id: int, telegram_username: Optional[str]) -> Participant:
         """
         Привязывает Telegram ID к участнику по номеру телефона.
-        Если участник уже существовал (например, ранее купил номерки офлайн
-        или через VK) — Telegram ID подключается к его существующей записи.
+        Если участник уже существовал (например, ранее купил номерки офлайн)
+        — Telegram ID подключается к его существующей записи.
         """
         participant, created = await self.get_or_create_by_phone(phone)
 
@@ -91,29 +95,5 @@ class RegistrationService:
         )
         return participant
 
-    async def link_vk(self, phone: str, vk_user_id: int, vk_username: Optional[str]) -> Participant:
-        """Аналогично link_telegram, но для VK."""
-        participant, created = await self.get_or_create_by_phone(phone)
-
-        existing_by_vk = await self.participants.get_by_vk_id(vk_user_id)
-        if existing_by_vk and existing_by_vk.id != participant.id:
-            raise ValidationError("Этот VK-аккаунт уже привязан к другому номеру телефона")
-
-        participant.vk_user_id = vk_user_id
-        participant.vk_username = vk_username
-        await self.session.flush()
-
-        await self.audit.log(
-            action="participant.vk_linked",
-            actor_type=AuditActorTypeEnum.BOT,
-            entity_type="participant",
-            entity_id=participant.id,
-            details={"vk_user_id": vk_user_id, "vk_username": vk_username, "new": created},
-        )
-        return participant
-
     async def find_by_telegram_id(self, telegram_user_id: int) -> Optional[Participant]:
         return await self.participants.get_by_telegram_id(telegram_user_id)
-
-    async def find_by_vk_id(self, vk_user_id: int) -> Optional[Participant]:
-        return await self.participants.get_by_vk_id(vk_user_id)

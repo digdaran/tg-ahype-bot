@@ -18,9 +18,10 @@
 #   3. docker compose build + docker compose up -d --remove-orphans.
 #   4. docker image prune -f — чистит старые слои образов.
 #
-# Миграции Alembic и создание Super Admin выполняются автоматически при
-# старте контейнера backend (docker/backend-entrypoint.sh) — здесь их
-# отдельно запускать не нужно.
+# Создание таблиц БД (create_all, без Alembic — проект работает только на
+# SQLite) и создание Super Admin выполняются автоматически при старте
+# контейнера backend (docker/backend-entrypoint.sh) — здесь отдельно
+# запускать не нужно.
 #
 # Отличие от scripts/auto_update.sh: тот же принцип действий, но
 # scripts/auto_update.sh предназначен для автозапуска по расписанию

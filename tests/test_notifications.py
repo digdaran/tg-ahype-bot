@@ -1,7 +1,7 @@
 """
 Тесты gating-логики NotificationService (app/services/notification_service.py):
 уведомление после онлайн-оплаты не должно уходить в выключенный канал, даже
-если у участника есть привязанный telegram_user_id/vk_user_id.
+если у участника есть привязанный telegram_user_id.
 """
 from __future__ import annotations
 

@@ -3,7 +3,7 @@ export type PaymentProvider = "tbank" | "vtb";
 export type PaymentStatus = "pending" | "succeeded" | "failed" | "canceled";
 export type TicketSource = "online" | "manual";
 export type ManualRegistrationStatus = "pending" | "confirmed" | "cancelled";
-export type BroadcastChannel = "telegram" | "vk" | "both";
+export type BroadcastChannel = "telegram";
 export type BroadcastStatus = "draft" | "sending" | "sent" | "failed";
 
 export interface PanelUser {
@@ -22,8 +22,6 @@ export interface Participant {
   full_name?: string | null;
   telegram_user_id?: number | null;
   telegram_username?: string | null;
-  vk_user_id?: number | null;
-  vk_username?: string | null;
   is_blocked: boolean;
   comment?: string | null;
   created_at: string;

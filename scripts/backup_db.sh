@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 #
-# Резервное копирование базы данных платформы.
-#
-# Поддерживает оба варианта хранилища:
-#   - SQLite  (по умолчанию) — бэкап через "sqlite3 ... VACUUM INTO", что
-#     даёт консистентный снимок без остановки backend'а (в отличие от
-#     простого cp файла, который рискует зацепить файл в момент записи).
-#   - PostgreSQL — обычный pg_dump в сжатом custom-формате.
+# Резервное копирование базы данных платформы (только SQLite — проект не
+# поддерживает PostgreSQL, см. README раздел «База данных»).
 #
 # Что делает:
-#   1. Определяет тип БД по DATABASE_URL в .env.
-#   2. Снимает дамп в BACKUP_DIR (по умолчанию ./backups) с меткой времени.
+#   1. Бэкап через "sqlite3 ... VACUUM INTO" — консистентный снимок без
+#      остановки backend'а и без риска зацепить файл в момент записи (в
+#      отличие от простого cp). Если sqlite3 CLI не установлен на хосте —
+#      fallback на обычную копию файла (с предупреждением в лог).
+#   2. Снимает дамп в BACKUP_DIR (по умолчанию ./backups) с меткой времени,
+#      сжимает (gzip).
 #   3. Удаляет бэкапы старше BACKUP_RETENTION_DAYS (по умолчанию 14 дней).
 #   4. Пишет лог в logs/backup.log.
 #
@@ -54,54 +53,41 @@ TIMESTAMP="$(date '+%Y%m%d_%H%M%S')"
 
 cd "$PROJECT_ROOT"
 
-if [[ "$DATABASE_URL" == sqlite* ]]; then
-    # DATABASE_URL вида sqlite+aiosqlite:///./data/db.sqlite3
-    DB_PATH="${DATABASE_URL#*:///}"
-    if [ ! -f "$DB_PATH" ]; then
-        # Backend обычно работает внутри Docker (docker-compose), а этот
-        # скрипт — на хосте; типовой путь внутри volume для sqlite_data.
-        DB_PATH="$PROJECT_ROOT/data/db.sqlite3"
-    fi
-    if [ ! -f "$DB_PATH" ]; then
-        log "ОШИБКА: файл БД не найден ни по '$DATABASE_URL', ни по '$DB_PATH'."
-        log "Если backend работает в Docker, экспортируйте volume вручную или запускайте бэкап внутри контейнера."
-        exit 1
-    fi
-
-    OUT_FILE="$BACKUP_DIR/db_${TIMESTAMP}.sqlite3"
-    if command -v sqlite3 >/dev/null 2>&1; then
-        # VACUUM INTO делает консистентный снимок без блокировки записи в оригинал.
-        sqlite3 "$DB_PATH" "VACUUM INTO '$OUT_FILE'"
-    else
-        log "sqlite3 CLI не найден — делаю обычную копию файла (может быть неконсистентной при активной записи)"
-        cp "$DB_PATH" "$OUT_FILE"
-    fi
-    gzip -f "$OUT_FILE"
-    log "готово: $OUT_FILE.gz"
-
-elif [[ "$DATABASE_URL" == postgresql* ]]; then
-    # postgresql+asyncpg://user:pass@host:port/dbname -> обычный postgres:// для pg_dump
-    PG_URL="$(echo "$DATABASE_URL" | sed -E 's#postgresql\+[a-z0-9]+://#postgresql://#')"
-    if ! command -v pg_dump >/dev/null 2>&1; then
-        log "ОШИБКА: pg_dump не найден в PATH. Установите postgresql-client или запускайте бэкап из контейнера с ним."
-        exit 1
-    fi
-    OUT_FILE="$BACKUP_DIR/db_${TIMESTAMP}.dump"
-    pg_dump --format=custom --file="$OUT_FILE" "$PG_URL"
-    gzip -f "$OUT_FILE"
-    log "готово: $OUT_FILE.gz"
-
-else
-    log "ОШИБКА: не удалось распознать тип БД по DATABASE_URL='$DATABASE_URL'"
+if [[ "$DATABASE_URL" != sqlite* ]]; then
+    log "ОШИБКА: DATABASE_URL='$DATABASE_URL' — не SQLite. Проект поддерживает только SQLite (см. README)."
     exit 1
 fi
+
+# DATABASE_URL вида sqlite+aiosqlite:///./data/db.sqlite3
+DB_PATH="${DATABASE_URL#*:///}"
+if [ ! -f "$DB_PATH" ]; then
+    # Backend обычно работает внутри Docker (docker-compose), а этот
+    # скрипт — на хосте; типовой путь внутри volume для sqlite_data.
+    DB_PATH="$PROJECT_ROOT/data/db.sqlite3"
+fi
+if [ ! -f "$DB_PATH" ]; then
+    log "ОШИБКА: файл БД не найден ни по '$DATABASE_URL', ни по '$DB_PATH'."
+    log "Если backend работает в Docker, экспортируйте volume вручную или запускайте бэкап внутри контейнера."
+    exit 1
+fi
+
+OUT_FILE="$BACKUP_DIR/db_${TIMESTAMP}.sqlite3"
+if command -v sqlite3 >/dev/null 2>&1; then
+    # VACUUM INTO делает консистентный снимок без блокировки записи в оригинал.
+    sqlite3 "$DB_PATH" "VACUUM INTO '$OUT_FILE'"
+else
+    log "sqlite3 CLI не найден — делаю обычную копию файла (может быть неконсистентной при активной записи)"
+    cp "$DB_PATH" "$OUT_FILE"
+fi
+gzip -f "$OUT_FILE"
+log "готово: $OUT_FILE.gz"
 
 # --- Ротация старых бэкапов ---
 DELETED=0
 while IFS= read -r -d '' old_file; do
     rm -f "$old_file"
     DELETED=$((DELETED + 1))
-done < <(find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'db_*.sqlite3.gz' -o -name 'db_*.dump.gz' \) -mtime "+${RETENTION_DAYS}" -print0)
+done < <(find "$BACKUP_DIR" -maxdepth 1 -type f -name 'db_*.sqlite3.gz' -mtime "+${RETENTION_DAYS}" -print0)
 
 if [ "$DELETED" -gt 0 ]; then
     log "удалено старых бэкапов (старше ${RETENTION_DAYS} дн.): $DELETED"

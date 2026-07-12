@@ -12,8 +12,6 @@ class ParticipantOut(BaseModel):
     full_name: Optional[str] = None
     telegram_user_id: Optional[int] = None
     telegram_username: Optional[str] = None
-    vk_user_id: Optional[int] = None
-    vk_username: Optional[str] = None
     is_blocked: bool
     comment: Optional[str] = None
     created_at: datetime

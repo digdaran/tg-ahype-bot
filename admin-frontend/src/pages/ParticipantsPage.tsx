@@ -26,7 +26,7 @@ export default function ParticipantsPage() {
       <div className="flex gap-2 mb-4">
         <input
           className="input max-w-sm"
-          placeholder="Поиск по телефону, имени, telegram, vk…"
+          placeholder="Поиск по телефону, имени, telegram…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && load()}
@@ -43,7 +43,6 @@ export default function ParticipantsPage() {
               <th>Телефон</th>
               <th>Имя</th>
               <th>Telegram</th>
-              <th>VK</th>
               <th>Регистрация</th>
               <th></th>
             </tr>
@@ -54,7 +53,6 @@ export default function ParticipantsPage() {
                 <td>{p.phone}</td>
                 <td>{p.full_name || "—"}</td>
                 <td>{p.telegram_username ? `@${p.telegram_username}` : p.telegram_user_id ? "привязан" : "—"}</td>
-                <td>{p.vk_user_id ? "привязан" : "—"}</td>
                 <td>{new Date(p.created_at).toLocaleDateString("ru-RU")}</td>
                 <td>
                   <button className="text-brand-600 text-sm font-medium" onClick={() => setSelected(p)}>
@@ -65,7 +63,7 @@ export default function ParticipantsPage() {
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center text-slate-400 py-6">
+                <td colSpan={5} className="text-center text-slate-400 py-6">
                   Ничего не найдено
                 </td>
               </tr>

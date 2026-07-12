@@ -30,11 +30,9 @@ class ReportService:
         """
         Возвращает оплаченные платежи для группировки по дате.
 
-        Группировка выполняется в Python (а не через SQL date()/strftime()),
-        т.к. диалекты SQLite и PostgreSQL используют разные функции работы
-        с датами — так бизнес-логика отчётов остаётся идентичной при переходе
-        на PostgreSQL (требование "переход на PostgreSQL без изменения
-        бизнес-логики").
+        Группировка выполняется в Python, а не через SQL date()/strftime() —
+        так проще и не завязано на конкретный диалект (сейчас только SQLite,
+        см. README).
         """
         stmt = select(Payment).where(Payment.status == PaymentStatusEnum.SUCCEEDED)
         if date_from:

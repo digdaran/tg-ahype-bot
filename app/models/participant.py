@@ -2,8 +2,12 @@
 Участник розыгрыша.
 
 Главный идентификатор — номер телефона (уникален, обязателен).
-Telegram и VK ID — вторичные, необязательные, привязываются автоматически
+Telegram ID — вторичный, необязательный, привязывается автоматически
 при первом запуске бота с уже известным номером телефона.
+
+VK-интеграция полностью удалена из проекта (вернёмся к ней отдельно позже) —
+если понадобится восстановить, поля vk_user_id/vk_username можно вернуть в
+этот класс (см. git-историю).
 """
 from __future__ import annotations
 
@@ -31,12 +35,9 @@ class Participant(Base, TimestampMixin):
 
     full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
-    # Вторичные идентификаторы
+    # Вторичный идентификатор
     telegram_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, unique=True, nullable=True, index=True)
     telegram_username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-
-    vk_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, unique=True, nullable=True, index=True)
-    vk_username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     comment: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)

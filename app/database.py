@@ -1,10 +1,10 @@
 """
 Настройка асинхронного подключения к БД через SQLAlchemy 2.x.
 
-Архитектура намеренно не зависит от конкретной СУБД: сейчас используется
-SQLite (aiosqlite), переход на PostgreSQL (asyncpg) выполняется исключительно
-изменением DATABASE_URL в .env — ни модели, ни репозитории, ни сервисы
-менять не требуется.
+Архитектура — только SQLite (aiosqlite). Postgres/Alembic намеренно не
+поддерживаются (осознанное упрощение проекта, см. README) — схема
+создаётся через `scripts/init_db.py` (`Base.metadata.create_all()`), без
+миграционного инструмента.
 """
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -16,15 +16,11 @@ from app.config import get_settings
 
 settings = get_settings()
 
-_connect_args = {}
-if settings.database_url.startswith("sqlite"):
-    _connect_args = {"check_same_thread": False}
-
 engine = create_async_engine(
     settings.database_url,
     echo=False,
     future=True,
-    connect_args=_connect_args,
+    connect_args={"check_same_thread": False},
 )
 
 AsyncSessionLocal = async_sessionmaker(

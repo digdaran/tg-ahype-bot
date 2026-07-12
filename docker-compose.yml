@@ -1,13 +1,9 @@
 # ============================================================================
 # Docker Compose — платформа розыгрышей цифровых постеров.
 #
-# По умолчанию используется SQLite (общий volume sqlite_data), что подходит
-# для старта / небольших объёмов. Переход на PostgreSQL выполняется БЕЗ
-# изменения кода — достаточно:
-#   1. Раскомментировать сервис `postgres` ниже.
-#   2. Поменять DATABASE_URL в .env на
-#      postgresql+asyncpg://raffle:raffle@postgres:5432/raffle
-#   3. Добавить `depends_on: [postgres]` в backend/telegram-bot/vk-bot.
+# Архитектура — только SQLite (общий volume sqlite_data). Postgres/Alembic
+# намеренно не поддерживаются (осознанное упрощение, см. README) — схема
+# создаётся через scripts/init_db.py при каждом старте backend'а.
 #
 # Reverse-proxy/TLS: публично наружу (порты 80/443) смотрит только сервис
 # `caddy` — он терминирует HTTPS (см. docker/Caddyfile) и проксирует запросы
@@ -19,16 +15,9 @@
 # Ограничения ресурсов (mem_limit/cpus) — стартовые ориентиры для небольшой
 # инсталляции, при необходимости скорректируйте под реальную нагрузку.
 #
-# Включение/выключение ботов: telegram-bot и vk-bot запускаются только если
-# активирован их профиль (Docker Compose profiles). Активные профили
-# задаются переменной COMPOSE_PROFILES в .env (Compose читает её оттуда сам,
-# без дополнительных флагов). Например:
-#   COMPOSE_PROFILES=telegram        # только Telegram, VK-бот не запускается вовсе
-#   COMPOSE_PROFILES=telegram,vk     # оба бота
-# backend/admin-frontend/caddy профилей не имеют — запускаются всегда.
-# Это ортогонально флагам TELEGRAM_ENABLED/VK_ENABLED в .env (app/config.py):
-# профиль решает, запускается ли контейнер бота вообще, а флаг — что делает
-# backend (уведомления/рассылки), если бот всё же выключен через профиль.
+# Участники работают только через Telegram (TELEGRAM_ENABLED=false в .env —
+# временно выключить бота, не трогая остальное; VK-интеграция полностью
+# удалена из проекта — см. README).
 # ============================================================================
 
 services:
@@ -51,7 +40,6 @@ services:
       retries: 5
 
   telegram-bot:
-    profiles: ["telegram"]
     build:
       context: .
       dockerfile: docker/telegram.Dockerfile
@@ -67,27 +55,6 @@ services:
     healthcheck:
       # У бота нет HTTP-эндпоинта — проверяем, что процесс long-polling жив.
       test: ["CMD-SHELL", "pgrep -f 'bots.telegram.bot' || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
-  vk-bot:
-    profiles: ["vk"]
-    build:
-      context: .
-      dockerfile: docker/vk.Dockerfile
-    env_file: .env
-    volumes:
-      - sqlite_data:/app/data
-    restart: unless-stopped
-    mem_limit: 256m
-    cpus: "0.5"
-    depends_on:
-      backend:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'bots.vk.bot' || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -134,27 +101,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # --- PostgreSQL (для перехода с SQLite — см. заголовок файла) ---
-  # postgres:
-  #   image: postgres:16-alpine
-  #   environment:
-  #     POSTGRES_USER: raffle
-  #     POSTGRES_PASSWORD: raffle
-  #     POSTGRES_DB: raffle
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   ports:
-  #     - "5432:5432"
-  #   restart: unless-stopped
-  #   mem_limit: 512m
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U raffle"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-
 volumes:
   sqlite_data:
   caddy_data:
   caddy_config:
-  # postgres_data:

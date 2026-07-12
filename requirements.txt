@@ -1,9 +1,11 @@
-# Зависимости разнесены по сервисам, т.к. aiogram и vkbottle требуют
-# несовместимые между собой версии aiohttp и не должны стоять в одном venv.
+# Зависимости разнесены по сервисам (backend / telegram-бот) - у каждого
+# сервиса свой набор пакетов и свой Docker-образ.
 #
 #   pip install -r requirements/backend.txt   # FastAPI admin API + webhooks
 #   pip install -r requirements/telegram.txt  # Telegram-бот
-#   pip install -r requirements/vk.txt        # VK-бот
 #
-# Общие зависимости лежат в requirements/base.txt и подключаются каждым
-# из трёх файлов через "-r base.txt".
+# Общие зависимости лежат в requirements/base.txt и подключаются обоими
+# файлами через "-r base.txt".
+#
+# VK-интеграция полностью удалена из проекта (вернёмся к ней отдельно
+# позже) - requirements/vk.txt и docker/vk.Dockerfile больше не существуют.

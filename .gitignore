@@ -11,3 +11,6 @@ admin-frontend/dist/
 logs/
 .auto_update.lock
 backups/
+*.tsbuildinfo
+admin-frontend/vite.config.js
+admin-frontend/vite.config.d.ts
